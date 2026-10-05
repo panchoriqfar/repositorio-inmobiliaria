@@ -22,6 +22,8 @@ class ContratoDAO(DAO):
             id_propiedad INTEGER NOT NULL,
             fecha_inicio TEXT NOT NULL,
             fecha_fin TEXT NOT NULL,
+            garantia_uf REAL NOT NULL DEFAULT 0.0,
+            estado TEXT NOT NULL DEFAULT 'Vigente',
             FOREIGN KEY (id_cliente) REFERENCES clientes(id),
             FOREIGN KEY (id_propiedad) REFERENCES propiedades(id)
         );
@@ -38,6 +40,15 @@ class ContratoDAO(DAO):
         cursor = self.conexion.cursor()
         cursor.execute(sql_contratos)
         cursor.execute(sql_lineas)
+        # Agregar columnas nuevas si la tabla ya existía (migración segura)
+        try:
+            cursor.execute("ALTER TABLE contratos ADD COLUMN garantia_uf REAL NOT NULL DEFAULT 0.0;")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE contratos ADD COLUMN estado TEXT NOT NULL DEFAULT 'Vigente';")
+        except Exception:
+            pass
         self.conexion.commit()
 
     def verificar_propiedad_arrendada(self, id_propiedad: int, fecha_inicio: str, fecha_fin: str) -> bool:
@@ -74,11 +85,11 @@ class ContratoDAO(DAO):
 
         # Insertar transacción principal
         sql_c = """
-        INSERT INTO contratos (id_cliente, id_propiedad, fecha_inicio, fecha_fin)
-        VALUES (?, ?, ?, ?);
+        INSERT INTO contratos (id_cliente, id_propiedad, fecha_inicio, fecha_fin, garantia_uf)
+        VALUES (?, ?, ?, ?, ?);
         """
         cursor = self.conexion.cursor()
-        cursor.execute(sql_c, (contrato.cliente.id_cliente, contrato.propiedad.id_propiedad, contrato.fecha_inicio, contrato.fecha_fin))
+        cursor.execute(sql_c, (contrato.cliente.id_cliente, contrato.propiedad.id_propiedad, contrato.fecha_inicio, contrato.fecha_fin, contrato.garantia_uf))
         contrato.id_contrato = cursor.lastrowid
 
         # Insertar líneas de detalle
@@ -105,21 +116,24 @@ class ContratoDAO(DAO):
 
     def buscar(self, id_contrato: int) -> Optional[ContratoArriendo]:
         """Busca un contrato por ID e instancia su cliente, propiedad y líneas de detalle."""
-        sql_c = "SELECT id, id_cliente, id_propiedad, fecha_inicio, fecha_fin FROM contratos WHERE id = ?;"
+        sql_c = "SELECT id, id_cliente, id_propiedad, fecha_inicio, fecha_fin, garantia_uf, estado FROM contratos WHERE id = ?;"
         cursor = self.conexion.cursor()
         cursor.execute(sql_c, (id_contrato,))
         row_c = cursor.fetchone()
         if not row_c:
             return None
 
-        c_id, id_cli, id_prop, f_ini, f_fin = row_c
+        c_id, id_cli, id_prop, f_ini, f_fin = row_c[0], row_c[1], row_c[2], row_c[3], row_c[4]
+        garantia = row_c[5] if len(row_c) > 5 else 0.0
+        estado = row_c[6] if len(row_c) > 6 else 'Vigente'
         cliente_dao = ClienteDAO(self.conexion)
         prop_dao = PropiedadDAO(self.conexion)
 
         cliente = cliente_dao.buscar(id_cli)
         propiedad = prop_dao.buscar(id_prop)
 
-        contrato = ContratoArriendo(cliente=cliente, propiedad=propiedad, fecha_inicio=f_ini, fecha_fin=f_fin, id_contrato=c_id)
+        contrato = ContratoArriendo(cliente=cliente, propiedad=propiedad, fecha_inicio=f_ini, fecha_fin=f_fin, id_contrato=c_id, garantia_uf=garantia)
+        contrato.estado = estado
 
         # Cargar líneas de detalle
         sql_l = "SELECT id, concepto, monto_uf FROM lineas_detalle WHERE id_contrato = ? ORDER BY id ASC;"
@@ -129,3 +143,12 @@ class ContratoDAO(DAO):
             contrato.agregar_linea_detalle(LineaDetalleContrato(concepto=r_l[1], monto_uf=r_l[2], id_linea=r_l[0]))
 
         return contrato
+
+    def finalizar(self, id_contrato: int) -> bool:
+        """Cambia el estado de un contrato a 'Finalizado'."""
+        sql = "UPDATE contratos SET estado = 'Finalizado' WHERE id = ?;"
+        cursor = self.conexion.cursor()
+        cursor.execute(sql, (id_contrato,))
+        self.conexion.commit()
+        return cursor.rowcount > 0
+

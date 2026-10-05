@@ -152,7 +152,8 @@ def menu_clientes(conexion):
         print("1. Registrar Nuevo Cliente")
         print("2. Listar Clientes")
         print("3. Cambiar Estado de Mora de un Cliente")
-        print("4. Volver al Menú Principal")
+        print("4. Eliminar Cliente")
+        print("5. Volver al Menú Principal")
 
         op = input("Seleccione una opción: ").strip()
         if op == "1":
@@ -192,6 +193,28 @@ def menu_clientes(conexion):
             print(f"✅ Estado de mora actualizado a: {'Con Mora' if nuevo_estado else 'Al día'}.")
 
         elif op == "4":
+            print("\n--- Eliminar Cliente ---")
+            c_id = leer_entero("ID del cliente a eliminar: ")
+            cli = c_dao.buscar(c_id)
+            if not cli:
+                print("❌ Cliente no encontrado.")
+                continue
+            print(f"   Cliente encontrado: {cli}")
+            if cli.tiene_mora:
+                print("⛔ No se puede eliminar al cliente porque tiene MORA pendiente.")
+                print("   Debe regularizar su situación antes de poder eliminarlo.")
+                continue
+            confirmar = input(f"¿Está seguro de eliminar al cliente '{cli.nombre}'? (s/n): ").strip().lower()
+            if confirmar == 's':
+                exito = c_dao.eliminar(c_id)
+                if exito:
+                    print("✅ Cliente eliminado correctamente.")
+                else:
+                    print("❌ No se pudo eliminar el cliente.")
+            else:
+                print("Operación cancelada.")
+
+        elif op == "5":
             break
         else:
             print("⚠️ Opción inválida. Intente de nuevo.")
@@ -205,7 +228,8 @@ def menu_contratos(conexion):
         print("\n--- 📝 GESTIÓN DE CONTRATOS DE ARRIENDO ---")
         print("1. Firmar Nuevo Contrato de Arriendo")
         print("2. Listar y Ver Detalle de Contratos Registrados")
-        print("3. Volver al Menú Principal")
+        print("3. Finalizar Contrato de Arriendo")
+        print("4. Volver al Menú Principal")
 
         op = input("Seleccione una opción: ").strip()
         if op == "1":
@@ -225,7 +249,10 @@ def menu_contratos(conexion):
             f_inicio = input("Fecha de Inicio (YYYY-MM-DD, ej: 2026-10-01): ").strip()
             f_fin = input("Fecha de Término (YYYY-MM-DD, ej: 2026-12-31): ").strip()
 
-            contrato = ContratoArriendo(cliente, propiedad, f_inicio, f_fin)
+            # Solicitar valor de garantía en UF
+            garantia_uf = leer_flotante("Valor de Garantía en UF (ej: 15.0): ")
+
+            contrato = ContratoArriendo(cliente, propiedad, f_inicio, f_fin, garantia_uf=garantia_uf)
 
             # Agregar líneas de detalle automáticas o personalizadas (Requisito P12)
             print(f"\nAgregando líneas de detalle para la propiedad ({propiedad.tipo()})...")
@@ -240,13 +267,14 @@ def menu_contratos(conexion):
             elif hasattr(propiedad, 'recargo_comercial_uf'):
                 extra_uf = propiedad.recargo_comercial_uf
             contrato.agregar_linea_detalle(LineaDetalleContrato("Gastos Adicionales / Mantenimiento", extra_uf))
-            # 3. Garantía (1 mes de arriendo)
-            contrato.agregar_linea_detalle(LineaDetalleContrato("Mes de Garantía", propiedad.valor_uf))
+            # 3. Garantía
+            contrato.agregar_linea_detalle(LineaDetalleContrato("Garantía", garantia_uf))
 
             # Intentar registrar el contrato (Valida las 2 Reglas de Negocio)
             try:
                 c_dao.insertar(contrato)
                 print(f"✅ ¡CONTRATO N° {contrato.id_contrato} REGISTRADO CON ÉXITO!")
+                print(f"   Garantía: {garantia_uf:.2f} UF")
                 print(f"   Total en UF: {contrato.total_uf():.2f} UF")
             except ClienteConMoraException as cme:
                 print(f"\n⛔ [REGLA DE NEGOCIO BLOQUEADA]: {cme}")
@@ -274,6 +302,36 @@ def menu_contratos(conexion):
                     print("="*60)
 
         elif op == "3":
+            print("\n--- Finalizar Contrato de Arriendo ---")
+            con_id = leer_entero("ID del contrato a finalizar: ")
+            contrato = c_dao.buscar(con_id)
+            if not contrato:
+                print("❌ Contrato no encontrado.")
+                continue
+            print(f"   Contrato encontrado: {contrato}")
+
+            if contrato.estado == "Finalizado":
+                print("ℹ️ Este contrato ya se encuentra finalizado.")
+                continue
+
+            # Verificar si el contrato aún está vigente comparando fecha_fin con hoy
+            from datetime import date
+            try:
+                fecha_fin_contrato = date.fromisoformat(contrato.fecha_fin)
+                hoy = date.today()
+                if fecha_fin_contrato >= hoy:
+                    print(f"\n⚠️ ¡ADVERTENCIA! Este contrato AÚN ESTÁ VIGENTE (vence el {contrato.fecha_fin}).")
+                    confirmar = input("¿Desea finalizar el contrato de todas formas? (s/n): ").strip().lower()
+                    if confirmar != 's':
+                        print("Operación cancelada. El contrato sigue vigente.")
+                        continue
+            except ValueError:
+                pass  # Si la fecha no se puede parsear, continuar sin advertencia
+
+            c_dao.finalizar(con_id)
+            print(f"✅ Contrato N° {con_id} finalizado correctamente.")
+
+        elif op == "4":
             break
         else:
             print("⚠️ Opción inválida.")

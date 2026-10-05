@@ -64,3 +64,11 @@ class ClienteDAO(DAO):
         cursor.execute(sql, (1 if tiene_mora else 0, id_cliente))
         self.conexion.commit()
         return cursor.rowcount > 0
+
+    def eliminar(self, id_cliente: int) -> bool:
+        """Elimina un cliente por su ID."""
+        sql = "DELETE FROM clientes WHERE id = ?;"
+        cursor = self.conexion.cursor()
+        cursor.execute(sql, (id_cliente,))
+        self.conexion.commit()
+        return cursor.rowcount > 0

@@ -8,12 +8,14 @@ from model.propiedad import Propiedad
 from model.linea_detalle_contrato import LineaDetalleContrato
 
 class ContratoArriendo:
-    def __init__(self, cliente: Cliente, propiedad: Propiedad, fecha_inicio: str, fecha_fin: str, id_contrato: int = None):
+    def __init__(self, cliente: Cliente, propiedad: Propiedad, fecha_inicio: str, fecha_fin: str, id_contrato: int = None, garantia_uf: float = 0.0):
         self.id_contrato = id_contrato
         self.cliente = cliente
         self.propiedad = propiedad
         self.fecha_inicio = fecha_inicio  # Formato YYYY-MM-DD
         self.fecha_fin = fecha_fin        # Formato YYYY-MM-DD
+        self.garantia_uf = float(garantia_uf)
+        self.estado = "Vigente"           # Vigente o Finalizado
         self.lineas_detalle: List[LineaDetalleContrato] = []
 
     def agregar_linea_detalle(self, linea: LineaDetalleContrato):
@@ -29,6 +31,9 @@ class ContratoArriendo:
         return sum(linea.subtotal_clp(valor_uf_dia) for linea in self.lineas_detalle)
 
     def __str__(self):
+        estado_str = "🟢 Vigente" if self.estado == "Vigente" else "🔴 Finalizado"
         return (f"Contrato N° {self.id_contrato or 'Nuevo'} | Cliente: {self.cliente.nombre} | "
                 f"Propiedad: {self.propiedad.direccion} ({self.propiedad.tipo()}) | "
-                f"Período: {self.fecha_inicio} al {self.fecha_fin} | Total UF: {self.total_uf():.2f} UF")
+                f"Período: {self.fecha_inicio} al {self.fecha_fin} | Garantía: {self.garantia_uf:.2f} UF | "
+                f"Total UF: {self.total_uf():.2f} UF | Estado: {estado_str}")
+
