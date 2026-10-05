@@ -59,6 +59,7 @@ class ContratoDAO(DAO):
         sql = """
         SELECT COUNT(*) FROM contratos
         WHERE id_propiedad = ?
+          AND estado = 'Vigente'
           AND NOT (fecha_fin < ? OR fecha_inicio > ?);
         """
         cursor = self.conexion.cursor()

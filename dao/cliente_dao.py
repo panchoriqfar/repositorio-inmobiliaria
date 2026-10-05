@@ -41,9 +41,14 @@ class ClienteDAO(DAO):
 
     def buscar_por_rut(self, rut: str) -> Optional[Cliente]:
         """Busca un cliente por RUT."""
+        from model.persona import Persona
+        if Persona.validar_rut(rut):
+            rut_busqueda = Persona.formatear_rut(rut)
+        else:
+            rut_busqueda = rut.strip().upper()
         sql = "SELECT id, rut, nombre, tiene_mora FROM clientes WHERE rut = ?;"
         cursor = self.conexion.cursor()
-        cursor.execute(sql, (rut.strip().upper(),))
+        cursor.execute(sql, (rut_busqueda,))
         row = cursor.fetchone()
         if not row:
             return None
