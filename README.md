@@ -49,11 +49,12 @@ python main.py
    * El módulo [conectar.py](file:///C:/Users/admin/Desktop/archivos%20evaluacion/repositorio%20inmobiliaria/conectar.py) ejecuta explícitamente `PRAGMA foreign_keys = ON;` al abrir la base de datos `inmobiliaria.db`, garantizando que no existan contratos huérfanos sin cliente o propiedad válida.
 
 4. **Resiliencia en el Consumo de Servicios Externos:**
-   * La clase `IndicadorService` consume `https://mindicador.cl/api/uf` definiendo un tiempo máximo de espera de `timeout=5`. Si la API no responde o el equipo está sin internet, el sistema captura la excepción de red, notifica el aviso al usuario y activa un valor UF de contingencia para garantizar la **continuidad del servicio**.
+   * La clase `IndicadorService` consume `https://mindicador.cl/api/uf` definiendo un tiempo máximo de espera de `timeout=5`. Si la API no responde o el equipo está sin internet, el sistema captura la excepción de red para evitar caídas, notifica que no se pudo conectar porque no se puede obtener el valor de la UF y que las funciones estarán limitadas. Las funciones que dependen de la UF indican que no están disponibles sin internet (sin utilizar valores ficticios de contingencia), mientras que todas las funciones locales (CRUD de propiedades, clientes y contratos) continúan funcionando con normalidad.
 
 5. **Excepciones Personalizadas para Reglas del Negocio:**
    * `PropiedadYaArrendadaException`: Impide solapamientos de fechas en alquileres.
    * `ClienteConMoraException`: Bloquea firmas de contratos a clientes con deudas pendientes.
+   * `ClienteYaExisteException`: Enmascara el error de restricción UNIQUE en SQLite ante RUT duplicado y retorna el ID del cliente existente.
 
 ---
 

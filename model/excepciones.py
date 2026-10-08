@@ -14,3 +14,12 @@ class ClienteConMoraException(Exception):
     """Excepción lanzada cuando se intenta firmar contrato con un cliente en mora."""
     def __init__(self, mensaje="El cliente presenta deudas/mora pendientes. No se puede firmar el contrato."):
         super().__init__(mensaje)
+
+class ClienteYaExisteException(Exception):
+    """Excepción lanzada cuando se intenta registrar un cliente con un RUT que ya existe en la base de datos."""
+    def __init__(self, mensaje="El cliente ya existe", id_cliente: int = None):
+        self.id_cliente = id_cliente
+        self.mensaje = mensaje
+        texto = f"{mensaje} (ID: {id_cliente})" if id_cliente is not None else mensaje
+        super().__init__(texto)
+

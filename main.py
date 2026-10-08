@@ -14,6 +14,15 @@ Cumple con todos los requisitos de la Ficha del Negocio y el Guión de Pruebas P
 """
 
 import sys
+
+# Asegurar codificación UTF-8 para consola de Windows
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
+from typing import Optional
 from conectar import crear_conexion
 from dao.propiedad_dao import PropiedadDAO
 from dao.cliente_dao import ClienteDAO
@@ -24,7 +33,7 @@ from model.oficina import Oficina
 from model.cliente import Cliente
 from model.contrato_arriendo import ContratoArriendo
 from model.linea_detalle_contrato import LineaDetalleContrato
-from model.excepciones import PropiedadYaArrendadaException, ClienteConMoraException
+from model.excepciones import PropiedadYaArrendadaException, ClienteConMoraException, ClienteYaExisteException
 from servicios.indicador_service import IndicadorService
 
 def inicializar_base_datos(conexion):
@@ -33,16 +42,21 @@ def inicializar_base_datos(conexion):
     ClienteDAO(conexion).crear_tabla()
     ContratoDAO(conexion).crear_tabla()
 
-def obtener_uf_actual() -> float:
-    """Obtiene el valor de la UF online o pide un valor de respaldo si falla internet."""
+def obtener_uf_actual(mostrar_aviso: bool = True) -> Optional[float]:
+    """
+    Obtiene el valor de la UF online desde mindicador.cl.
+    Si falla la conexión, notifica que no se pudo conectar porque no se puede obtener el valor de la UF
+    y que las funciones estarán limitadas mientras no esté conectado a internet.
+    No utiliza valores de contingencia y retorna None.
+    """
     service = IndicadorService(timeout=5)
     try:
-        valor_uf = service.obtener_valor_uf()
-        return valor_uf
-    except Exception as e:
-        print("\n⚠️ [AVISO DE RED] No se pudo obtener la UF desde internet (Sin conexión o timeout).")
-        print("   El programa continuará funcionando utilizando un valor UF de respaldo ($39.000 CLP).")
-        return 39000.0
+        return service.obtener_valor_uf()
+    except Exception:
+        if mostrar_aviso:
+            print("\n⚠️ [AVISO DE CONEXIÓN] No se pudo conectar a la API de mindicador.cl porque no se puede obtener el valor de la UF.")
+            print("   Las funciones estarán limitadas mientras no esté conectado a internet.")
+        return None
 
 def leer_entero(mensaje: str) -> int:
     """Lee un entero validando la entrada (Evita caídas con valores no numéricos)."""
@@ -166,6 +180,8 @@ def menu_clientes(conexion):
                 cli = Cliente(rut=rut, nombre=nombre, tiene_mora=mora)
                 c_dao.insertar(cli)
                 print(f"✅ Cliente registrado exitosamente con ID N° {cli.id_cliente}.")
+            except ClienteYaExisteException as cye:
+                print(f"⚠️ {cye.mensaje}. ID del cliente: {cye.id_cliente}")
             except ValueError as ve:
                 print(f"❌ Rechazado por validación de RUT: {ve}")
                 print("   (El programa continúa funcionando sin detenerse).")
@@ -294,11 +310,23 @@ def menu_contratos(conexion):
                 uf_dia = obtener_uf_actual()
                 for c in lista:
                     print("\n" + "="*60)
-                    print(c)
-                    print(f"   Monto Total en Pesos CLP (UF hoy ${uf_dia:,.0f}): ${c.total_clp(uf_dia):,} CLP")
-                    print("   --- Líneas de Detalle del Contrato ---")
-                    for l in c.lineas_detalle:
-                        print(f"     • {l.concepto}: {l.monto_uf:.2f} UF  (${l.subtotal_clp(uf_dia):,} CLP)")
+                    if uf_dia is not None:
+                        # Con internet: mostrar información completa con montos en UF y CLP
+                        print(c)
+                        print(f"   Monto Total en Pesos CLP (UF hoy ${uf_dia:,.0f}): ${c.total_clp(uf_dia):,} CLP")
+                        print("   --- Líneas de Detalle del Contrato ---")
+                        for l in c.lineas_detalle:
+                            print(f"     • {l.concepto}: {l.monto_uf:.2f} UF  (${l.subtotal_clp(uf_dia):,} CLP)")
+                    else:
+                        # Sin internet: mostrar solo datos básicos sin ningún monto
+                        estado_str = "🟢 Vigente" if c.estado == "Vigente" else "🔴 Finalizado"
+                        print(f"Contrato N° {c.id_contrato} | Cliente: {c.cliente.nombre} | "
+                              f"Propiedad: {c.propiedad.direccion} ({c.propiedad.tipo()}) | "
+                              f"Período: {c.fecha_inicio} al {c.fecha_fin} | Estado: {estado_str}")
+                        print("   ❌ Los montos no están disponibles sin conexión a internet.")
+                        print("   --- Líneas de Detalle del Contrato ---")
+                        for l in c.lineas_detalle:
+                            print(f"     • {l.concepto}: (Monto no disponible sin conexión a internet)")
                     print("="*60)
 
         elif op == "3":
@@ -339,6 +367,10 @@ def menu_contratos(conexion):
 def probar_calculo_polimorfico(conexion):
     print("\n--- 🧮 CÁLCULO DE ARRIENDO SEGÚN TIPO DE PROPIEDAD (POLIMORFISMO) ---")
     uf_dia = obtener_uf_actual()
+    if uf_dia is None:
+        print("❌ Esta función requiere del valor de la UF y no está disponible sin conexión a internet.")
+        return
+
     print(f"Valor UF del día utilizado: ${uf_dia:,.2f} CLP\n")
     
     casa = Casa("Av. Alemania 123", 120, 15.0, gastos_jardin_uf=1.0)
@@ -385,7 +417,10 @@ def main():
         elif op == "5":
             print("\n--- Consultar UF desde API mindicador.cl ---")
             uf = obtener_uf_actual()
-            print(f"✅ Valor actual de la UF: ${uf:,.2f} CLP")
+            if uf is not None:
+                print(f"✅ Valor actual de la UF: ${uf:,.2f} CLP")
+            else:
+                print("❌ Esta función no está disponible sin conexión a internet.")
         elif op == "6":
             print("\n¡Gracias por utilizar el sistema de Inmobiliaria Terrenos del Sur!")
             conexion.close()

@@ -1,9 +1,11 @@
 """
 ClienteDAO: Manejo de persistencia para la entidad Cliente.
 """
+import sqlite3
 from typing import List, Optional
 from dao.dao import DAO
 from model.cliente import Cliente
+from model.excepciones import ClienteYaExisteException
 
 class ClienteDAO(DAO):
     def crear_tabla(self):
@@ -21,13 +23,23 @@ class ClienteDAO(DAO):
         self.conexion.commit()
 
     def insertar(self, cliente: Cliente) -> Cliente:
-        """Inserta un cliente en la base de datos."""
+        """
+        Inserta un cliente en la base de datos.
+        Si el RUT ya existe, captura el error de integridad SQL (IntegrityError),
+        enmascara el error y lanza ClienteYaExisteException devolviendo el ID del cliente.
+        """
         sql = "INSERT INTO clientes (rut, nombre, tiene_mora) VALUES (?, ?, ?);"
         cursor = self.conexion.cursor()
-        cursor.execute(sql, (cliente.rut, cliente.nombre, 1 if cliente.tiene_mora else 0))
-        self.conexion.commit()
-        cliente.id_cliente = cursor.lastrowid
-        return cliente
+        try:
+            cursor.execute(sql, (cliente.rut, cliente.nombre, 1 if cliente.tiene_mora else 0))
+            self.conexion.commit()
+            cliente.id_cliente = cursor.lastrowid
+            return cliente
+        except sqlite3.IntegrityError:
+            cliente_existente = self.buscar_por_rut(cliente.rut)
+            id_existente = cliente_existente.id_cliente if cliente_existente else None
+            cliente.id_cliente = id_existente
+            raise ClienteYaExisteException("El cliente ya existe", id_cliente=id_existente)
 
     def buscar(self, id_cliente: int) -> Optional[Cliente]:
         """Busca un cliente por ID."""
