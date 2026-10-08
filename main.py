@@ -54,7 +54,7 @@ def obtener_uf_actual(mostrar_aviso: bool = True) -> Optional[float]:
         return service.obtener_valor_uf()
     except Exception:
         if mostrar_aviso:
-            print("\n⚠️ [AVISO DE CONEXIÓN] No se pudo conectar a la API de mindicador.cl porque no se puede obtener el valor de la UF.")
+            print("\n⚠️ [AVISO DE CONEXIÓN] No se pudo conectar a la API de mindicador.cl por lo que no se puede obtener el valor de la UF.")
             print("   Las funciones estarán limitadas mientras no esté conectado a internet.")
         return None
 
